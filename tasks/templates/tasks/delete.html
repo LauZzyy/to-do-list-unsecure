@@ -3,7 +3,6 @@
 {% block content %}
 <h1 class="matrix-title"><b>DELETE_TASK</b><span class="cursor">_</span></h1>
 <div class="center-column">
-	<!-- TODO: interpolation non echappee, XSS stockee -->
 	<p>Are you sure you want to delete "{{ item }}"?</p>
 	<a class="btn btn-info" href="{% url 'list' %}">Cancel</a>
 	<form method="POST" action="">

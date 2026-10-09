@@ -95,3 +95,47 @@ class TaskViewsTest(TestCase):
 
         self.assertEqual(Task.objects.count(), 0)
         self.assertRedirects(response, "/")
+
+
+class SecurityFixesTest(TestCase):
+    """Tests des corrections de sécurité (J2 ex. 14)"""
+
+    def setUp(self):
+        self.task = Task.objects.create(title="<script>alert(1)</script>")
+
+    def test_title_is_escaped_on_index(self):
+        response = self.client.get("/")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        self.assertContains(response, "&lt;script&gt;")
+
+    def test_search_uses_orm_and_escapes(self):
+        response = self.client.get("/search/", {"q": "script"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "&lt;script&gt;")
+        response = self.client.get("/search/", {"q": "' OR '1'='1"})
+        self.assertNotContains(response, "&lt;script&gt;")
+
+    def test_unknown_task_returns_404(self):
+        self.assertEqual(self.client.get("/update_task/9999/").status_code, 404)
+        self.assertEqual(self.client.get("/delete_task/9999/").status_code, 404)
+
+    def test_invalid_update_shows_form_again(self):
+        response = self.client.post(f"/update_task/{self.task.id}/", {"title": ""})
+        self.assertEqual(response.status_code, 200)
+
+    def test_delete_refuses_open_redirect(self):
+        response = self.client.post(f"/delete_task/{self.task.id}/?next=https://evil.example")
+        self.assertRedirects(response, "/")
+
+    def test_admin_panel_disabled_without_env_password(self):
+        response = self.client.get("/admin_panel/", HTTP_X_ADMIN_PASSWORD="nimporte-quoi")
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_panel_uses_env_password(self):
+        from unittest import mock
+        with mock.patch.dict("os.environ", {"TODOLIST_ADMIN_PASSWORD": "valeur-de-test"}):
+            ok = self.client.get("/admin_panel/", HTTP_X_ADMIN_PASSWORD="valeur-de-test")
+            ko = self.client.get("/admin_panel/", HTTP_X_ADMIN_PASSWORD="mauvais")
+        self.assertEqual(ok.status_code, 200)
+        self.assertNotContains(ok, "SECRET_KEY")
+        self.assertEqual(ko.status_code, 403)

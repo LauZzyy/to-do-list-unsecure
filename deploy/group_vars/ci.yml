@@ -1,0 +1,5 @@
+---
+ufw_rules:
+  - { port: "8080", proto: tcp, from: "{{ lab_network }}", comment: "Jenkins UI" }
+
+gitleaks_version: "8.28.0"

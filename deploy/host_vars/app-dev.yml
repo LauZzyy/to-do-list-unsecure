@@ -1,0 +1,3 @@
+---
+# Recette : mode debug autorisé
+django_debug: true

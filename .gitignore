@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.requirements.txt
+requirements.txt
+coverage.xml
+.coverage
+pip-audit.*
+# Ansible
+deploy/lynis-reports/
+*.retry
+# Clés privées : JAMAIS dans git (seules les .pub sont versionnées)
+*.key
+id_*
+!*.pub

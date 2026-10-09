@@ -1,0 +1,27 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Todolist Django (Gunicorn)
+After=network.target
+
+[Service]
+# Ex. 17 : utilisateur dédié, sans sudo ni shell
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_dir }}
+EnvironmentFile=/etc/todolist/app.env
+EnvironmentFile=-/etc/todolist/secrets.env
+ExecStart={{ venv_dir }}/bin/gunicorn --bind 0.0.0.0:80 --workers 2 --worker-class gthread --threads 4 todo.wsgi:application
+Restart=on-failure
+
+# Écouter sur le port 80 sans être root : seule cette capacité est accordée
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+# Système en lecture seule sauf le répertoire de l'app (base SQLite)
+ProtectSystem=strict
+ReadWritePaths={{ app_dir }}
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,175 @@
+---
+# Rôle jenkins : J2 ex. 1 (installation) + ex. 6 (moindre privilège)
+
+- name: Paquets nécessaires (Ansible pour déployer, Python pour tester)
+  ansible.builtin.apt:
+    name: [fontconfig, gnupg, ca-certificates, curl, git, python3, python3-venv, python3-pip, ansible]
+    state: present
+
+- name: Répertoire des clés APT
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+# Jenkins exige Java 21, absent des dépôts Debian 12 : on prend Eclipse Temurin 21
+- name: Clé du dépôt Eclipse Temurin (Java 21)
+  ansible.builtin.get_url:
+    url: https://packages.adoptium.net/artifactory/api/gpg/key/public
+    dest: /etc/apt/keyrings/adoptium.asc
+    mode: "0644"
+
+- name: Dépôt Eclipse Temurin
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb {{ ansible_distribution_release }} main"
+    filename: adoptium
+    state: present
+
+- name: Installer Java 21
+  ansible.builtin.apt:
+    name: temurin-21-jre
+    state: present
+    update_cache: true
+
+- name: Clé du dépôt Jenkins LTS
+  ansible.builtin.get_url:
+    url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+    dest: /etc/apt/keyrings/jenkins-keyring.asc
+    mode: "0644"
+
+- name: Dépôt Jenkins LTS
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+    filename: jenkins
+    state: present
+
+- name: Installer Jenkins
+  ansible.builtin.apt:
+    name: jenkins
+    state: present
+    update_cache: true
+
+# ---- Outils de sécurité utilisés par les jobs ------------------------------
+- name: Installer pip-audit dans un venv dédié
+  ansible.builtin.pip:
+    name: pip-audit
+    virtualenv: /opt/pip-audit
+    virtualenv_command: python3 -m venv
+    state: latest
+
+- name: Exposer pip-audit dans le PATH
+  ansible.builtin.file:
+    src: /opt/pip-audit/bin/pip-audit
+    dest: /usr/local/bin/pip-audit
+    state: link
+
+- name: Télécharger gitleaks (somme de contrôle vérifiée)
+  ansible.builtin.get_url:
+    url: "https://github.com/gitleaks/gitleaks/releases/download/v{{ gitleaks_version }}/gitleaks_{{ gitleaks_version }}_linux_x64.tar.gz"
+    dest: "/tmp/gitleaks_{{ gitleaks_version }}.tar.gz"
+    checksum: "sha256:https://github.com/gitleaks/gitleaks/releases/download/v{{ gitleaks_version }}/gitleaks_{{ gitleaks_version }}_checksums.txt"
+    mode: "0644"
+
+- name: Installer gitleaks
+  ansible.builtin.unarchive:
+    src: "/tmp/gitleaks_{{ gitleaks_version }}.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    include: [gitleaks]
+    mode: "0755"
+
+# ---- Ex. 6 : moindre privilège pour l'utilisateur jenkins ------------------
+- name: Compte jenkins sans shell interactif, mot de passe verrouillé, aucun groupe en plus
+  ansible.builtin.user:
+    name: jenkins
+    shell: /usr/sbin/nologin
+    password_lock: true
+    groups: []
+    append: false
+
+- name: Home de jenkins lisible uniquement par jenkins
+  ansible.builtin.file:
+    path: /var/lib/jenkins
+    state: directory
+    owner: jenkins
+    group: jenkins
+    mode: "0750"
+
+- name: Aucun droit sudo pour jenkins
+  ansible.builtin.file:
+    path: /etc/sudoers.d/jenkins
+    state: absent
+
+- name: Répertoire des surcharges systemd de Jenkins
+  ansible.builtin.file:
+    path: /etc/systemd/system/jenkins.service.d
+    state: directory
+    mode: "0755"
+
+- name: Durcir le service systemd de Jenkins
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/jenkins.service.d/override-hardening.conf
+    content: |
+      # J2 ex. 6 - Jenkins ne peut ni gagner de privilèges ni écrire hors de ses répertoires
+      [Service]
+      NoNewPrivileges=true
+      PrivateTmp=true
+      ProtectSystem=full
+      ProtectHome=true
+      ProtectKernelTunables=true
+      ProtectKernelModules=true
+      ProtectControlGroups=true
+      RestrictSUIDSGID=true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Redémarrer Jenkins
+
+- name: Démarrer Jenkins au boot
+  ansible.builtin.systemd_service:
+    name: jenkins
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# ---- Empreintes SSH des serveurs applicatifs (pas de "trust on first use") --
+- name: Répertoire .ssh de jenkins
+  ansible.builtin.file:
+    path: /var/lib/jenkins/.ssh
+    state: directory
+    owner: jenkins
+    group: jenkins
+    mode: "0700"
+
+- name: Déclarer les clés d'hôte des serveurs applicatifs
+  ansible.builtin.known_hosts:
+    path: /var/lib/jenkins/.ssh/known_hosts
+    name: "{{ hostvars[item].ansible_host }}"
+    key: "{{ hostvars[item].ansible_host }} {{ (hostvars[item].ssh_host_pubkey | b64decode).split()[:2] | join(' ') }}"
+    state: present
+  loop: "{{ groups['apps'] }}"
+  when: hostvars[item].ssh_host_pubkey is defined
+
+- name: Droits du fichier known_hosts
+  ansible.builtin.file:
+    path: /var/lib/jenkins/.ssh/known_hosts
+    owner: jenkins
+    group: jenkins
+    mode: "0644"
+
+# Gate des dépendances : stocké sur Jenkins (pas dans le dépôt) pour qu'une
+# branche ne puisse pas le modifier afin de passer le contrôle
+- name: Répertoire des scripts CI
+  ansible.builtin.file:
+    path: /opt/ci
+    state: directory
+    mode: "0755"
+
+- name: Installer les scripts et la config de contrôle (lecture seule pour jenkins)
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/ci/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop: [audit_gate.py, pipfile_to_requirements.py, gitleaks.toml]

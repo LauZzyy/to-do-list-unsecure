@@ -1,0 +1,22 @@
+---
+# ---- Connexion -------------------------------------------------------------
+ansible_user: admin
+# Depuis WSL : votre clé perso. Depuis Jenkins : la clé injectée par le
+# Credentials Store dans la variable DEPLOY_SSH_KEY (jamais écrite dans le dépôt).
+ansible_ssh_private_key_file: "{{ lookup('env', 'DEPLOY_SSH_KEY') | default('~/m2-devsecops/id-rda-infra.key', true) }}"
+ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+
+# ---- Durcissement commun (J1 ex. 14 à 18) ---------------------------------
+# Clés autorisées pour le compte admin (liste exclusive : toute autre clé est retirée)
+admin_authorized_keys:
+  - id-rda-infra.key.pub
+
+# Comptes autorisés à ouvrir une session SSH.
+# "vagrant" est conservé sinon `vagrant up/reload` ne peut plus joindre les VM.
+ssh_allow_users: [admin, vagrant]
+
+# Réseau privé du lab (sert à restreindre les ports d'administration)
+lab_network: 192.168.56.0/24
+
+# Règles UFW propres à chaque groupe (SSH est toujours autorisé par le rôle)
+ufw_rules: []

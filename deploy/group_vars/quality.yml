@@ -1,0 +1,5 @@
+---
+ufw_rules:
+  - { port: "9000", proto: tcp, from: "{{ lab_network }}", comment: "SonarQube UI" }
+
+sonarqube_image: "sonarqube:community"

@@ -1,0 +1,28 @@
+---
+# J2 ex. 1 et 6 : VM Jenkins installée ET durcie comme les autres
+#   ansible-playbook jenkins.yml
+
+# 1) On lit la clé d'hôte SSH de chaque serveur applicatif par un canal de
+#    confiance (Ansible, depuis le poste admin) pour la donner à Jenkins.
+- name: Collecter les empreintes SSH des serveurs applicatifs
+  hosts: apps
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Lire la clé d'hôte ed25519
+      ansible.builtin.slurp:
+        src: /etc/ssh/ssh_host_ed25519_key.pub
+      register: hostkey
+
+    - name: Mémoriser la clé
+      ansible.builtin.set_fact:
+        ssh_host_pubkey: "{{ hostkey.content }}"
+
+- name: Installer et durcir Jenkins
+  hosts: ci
+  become: true
+  roles:
+    - role: hardening
+      tags: [hardening]
+    - role: jenkins
+      tags: [jenkins]

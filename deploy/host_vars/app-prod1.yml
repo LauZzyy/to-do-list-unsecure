@@ -1,0 +1,3 @@
+---
+# Production : jamais de DEBUG (J1 ex. 12)
+django_debug: false

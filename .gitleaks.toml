@@ -1,0 +1,37 @@
+# Configuration gitleaks du projet todolist
+# - reprend toutes les règles par défaut de gitleaks
+# - ajoute 2 règles que les règles par défaut ne voient PAS sur ce dépôt
+# - déclare les faux positifs connus (allowlist)
+title = "gitleaks - todolist"
+
+[extend]
+useDefault = true
+
+# La règle générique de gitleaks ignore les clés qui contiennent "insecure" :
+# la SECRET_KEY Django du dépôt passe donc sous le radar. On la cible explicitement.
+[[rules]]
+id = "django-secret-key"
+description = "Clé secrète Django écrite en dur"
+# (?m)^ : seulement une vraie affectation en début de ligne (évite le faux positif
+# "SECRET_KEY = " + settings.SECRET_KEY trouvé dans views.py avec une 1re version de la règle)
+regex = '''(?m)^\s*SECRET_KEY\s*=\s*['"]([^'"\n]{20,})['"]'''
+secretGroup = 1
+keywords = ["secret_key"]
+
+# Mot de passe affecté en dur à une variable (ADMIN_PASSWORD = "...").
+[[rules]]
+id = "hardcoded-password"
+description = "Mot de passe écrit en dur dans le code"
+regex = '''(?i)\b[a-z_]*(?:password|passwd|pwd)\b\s*=\s*['"]([^'"\s]{6,})['"]'''
+secretGroup = 1
+keywords = ["password", "passwd", "pwd"]
+
+# Faux positifs connus : valeurs factices des tests et de la CI
+[allowlist]
+description = "Faux positifs connus"
+paths = [
+  '''(^|/)tasks/tests\.py$''',
+]
+regexes = [
+  '''ci-only-not-a-secret''',
+]

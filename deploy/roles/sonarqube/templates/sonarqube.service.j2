@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+[Unit]
+Description=SonarQube Community (conteneur Docker)
+After=docker.service
+Requires=docker.service
+
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f sonarqube
+ExecStartPre=/usr/bin/docker pull {{ sonarqube_image }}
+# Publié uniquement sur l'IP privée : Docker contourne UFW pour les ports publiés
+ExecStart=/usr/bin/docker run --rm --name sonarqube \
+  -p {{ ansible_host }}:9000:9000 \
+  -v sonarqube_data:/opt/sonarqube/data \
+  -v sonarqube_extensions:/opt/sonarqube/extensions \
+  -v sonarqube_logs:/opt/sonarqube/logs \
+  {{ sonarqube_image }}
+ExecStop=/usr/bin/docker stop sonarqube
+Restart=on-failure
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

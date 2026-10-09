@@ -1,0 +1,109 @@
+---
+# Rôle hardening : J1 ex. 14 à 18, appliqué à TOUTES les VM (apps, jenkins, sonarqube)
+
+# ---- Ex. 16 : mises à jour -------------------------------------------------
+- name: Mettre à jour le cache APT et les paquets
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: safe
+  tags: [hardening, updates]
+
+- name: Installer les outils de base et unattended-upgrades
+  ansible.builtin.apt:
+    name: [unattended-upgrades, apt-listchanges, ufw, lynis, acl, sudo]
+    state: present
+  tags: [hardening, updates]
+
+- name: Activer l'installation automatique des mises à jour de sécurité
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [hardening, updates]
+
+# ---- Ex. 14 : SSH ----------------------------------------------------------
+- name: N'autoriser que les clés déclarées pour le compte admin
+  ansible.posix.authorized_key:
+    user: admin
+    key: "{% for k in admin_authorized_keys %}{{ lookup('ansible.builtin.file', playbook_dir ~ '/files/' ~ k) }}\n{% endfor %}"
+    exclusive: true
+    state: present
+  tags: [hardening, ssh]
+
+- name: Durcir la configuration SSH (drop-in lu avant la config par défaut)
+  ansible.builtin.template:
+    src: sshd-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
+    owner: root
+    group: root
+    mode: "0600"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Redémarrer sshd
+  tags: [hardening, ssh]
+
+- name: Vérifier la configuration SSH complète avant tout redémarrage
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  tags: [hardening, ssh]
+
+# ---- Ex. 15 : pare-feu -----------------------------------------------------
+- name: UFW - autoriser SSH AVANT d'activer le pare-feu
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    comment: SSH
+  tags: [hardening, firewall]
+
+- name: UFW - règles propres au groupe
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    from_ip: "{{ item.from }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ ufw_rules }}"
+  tags: [hardening, firewall]
+
+- name: UFW - deny incoming / allow outgoing, puis activation
+  community.general.ufw:
+    state: enabled
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+    logging: "low"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+  tags: [hardening, firewall]
+
+# ---- Ex. 18 : corrections issues du rapport Lynis --------------------------
+# Finding 1 - SSH-7408 : options sshd encore permissives -> traité dans sshd-hardening.conf.j2
+
+# Finding 2 - KRNL-6000 : paramètres noyau (sysctl) différents du profil durci
+- name: Appliquer les paramètres noyau durcis (KRNL-6000)
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/90-hardening.conf
+    reload: true
+  loop: "{{ hardening_sysctl | dict2items }}"
+  tags: [hardening, lynis]
+
+# Finding 3 - BANN-7126 / BANN-7130 : pas de bannière légale
+- name: Installer une bannière légale (BANN-7126 / BANN-7130)
+  ansible.builtin.copy:
+    dest: "{{ item }}"
+    content: |
+      Accès réservé aux personnes autorisées. Toute connexion est journalisée.
+      Toute tentative d'accès non autorisé fera l'objet de poursuites.
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [/etc/issue, /etc/issue.net]
+  tags: [hardening, lynis]

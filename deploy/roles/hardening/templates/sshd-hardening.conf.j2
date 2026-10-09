@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+# J1 ex. 14 + finding Lynis SSH-7408
+# Fichier lu en premier : pour sshd, la première valeur rencontrée gagne.
+
+# Ex. 14 : clé uniquement, pas de root
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PermitEmptyPasswords no
+AllowUsers {{ ssh_allow_users | join(' ') }}
+
+# SSH-7408 : réduire la surface
+MaxAuthTries 3
+MaxSessions 2
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+TCPKeepAlive no
+LogLevel VERBOSE
+Banner /etc/issue.net

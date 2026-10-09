@@ -1,0 +1,11 @@
+---
+# J2 ex. 12 : serveur SonarQube dédié, durci comme le reste
+#   ansible-playbook sonarqube.yml
+- name: Installer et durcir SonarQube
+  hosts: quality
+  become: true
+  roles:
+    - role: hardening
+      tags: [hardening]
+    - role: sonarqube
+      tags: [sonarqube]

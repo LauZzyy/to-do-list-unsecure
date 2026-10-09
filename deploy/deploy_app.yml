@@ -1,0 +1,12 @@
+---
+# Playbook complet J1 + J2 : durcissement + déploiement de la todolist
+#   Tout (admin, depuis WSL) :   ansible-playbook deploy_app.yml
+#   Appli seule (Jenkins)    :   ansible-playbook deploy_app.yml --tags app --limit dev
+- name: Durcissement et déploiement de la todolist
+  hosts: apps
+  become: true
+  roles:
+    - role: hardening
+      tags: [hardening]
+    - role: todolist
+      tags: [app]

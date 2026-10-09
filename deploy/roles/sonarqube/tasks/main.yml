@@ -1,0 +1,50 @@
+---
+# Rôle sonarqube : J2 ex. 12, SonarQube Community dans un conteneur Docker
+
+- name: Prérequis noyau d'Elasticsearch (embarqué dans SonarQube)
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-sonarqube.conf
+    reload: true
+  loop:
+    - { key: vm.max_map_count, value: "524288" }
+    - { key: fs.file-max, value: "131072" }
+
+- name: Installer Docker
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+
+- name: Démarrer Docker au boot
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Service systemd SonarQube (conteneur)
+  ansible.builtin.template:
+    src: sonarqube.service.j2
+    dest: /etc/systemd/system/sonarqube.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Redémarrer SonarQube
+
+- name: Démarrer SonarQube au boot
+  ansible.builtin.systemd_service:
+    name: sonarqube
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Attendre que SonarQube soit opérationnel (premier démarrage ~2-3 min)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:9000/api/system/status"
+    return_content: true
+  register: sq
+  until: sq.json is defined and sq.json.status == 'UP'
+  retries: 60
+  delay: 10
+  delegate_to: localhost
+  become: false

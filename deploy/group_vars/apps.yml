@@ -1,0 +1,26 @@
+---
+# La clé de déploiement de Jenkins n'est autorisée QUE sur les serveurs applicatifs
+admin_authorized_keys:
+  - id-rda-infra.key.pub
+  - jenkins-deploy.pub
+
+ufw_rules:
+  - { port: "80", proto: tcp, from: any, comment: "todolist HTTP" }
+
+# ---- Application -----------------------------------------------------------
+app_repo: "https://github.com/CHANGEZ-MOI/to-do-list-unsecure.git"   # votre fork
+app_user: todolist
+app_dir: /opt/todolist
+venv_dir: /opt/todolist/venv
+# Branche demandée (sert à la traçabilité et à la règle "prod = main")
+app_branch: main
+# Référence réellement déployée : branche, tag ou SHA (Jenkins passe le SHA testé)
+app_version: "{{ app_branch }}"
+# Qui a lancé le déploiement (Jenkins renseigne BUILD_USER_ID / BUILD_URL)
+deployed_by: "{{ lookup('env', 'DEPLOYED_BY') | default(lookup('env', 'USER'), true) }}"
+deploy_build_url: "{{ lookup('env', 'BUILD_URL') | default('manuel', true) }}"
+
+# Secrets applicatifs : injectés par Jenkins (Credentials Binding) via l'environnement.
+# Vides = le fichier de secrets existant sur le serveur n'est pas touché.
+django_secret_key: "{{ lookup('env', 'DJANGO_SECRET_KEY') }}"
+todolist_admin_password: "{{ lookup('env', 'TODOLIST_ADMIN_PASSWORD') }}"

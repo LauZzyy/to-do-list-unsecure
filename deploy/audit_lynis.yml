@@ -1,0 +1,42 @@
+---
+# J1 ex. 18 / 19 : mesurer le durcissement de chaque VM
+#   ansible-playbook audit_lynis.yml               (toutes les VM)
+#   ansible-playbook audit_lynis.yml --limit apps
+# Les rapports complets sont rapatriés dans ./lynis-reports/
+- name: Audit Lynis
+  hosts: my_infra
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Installer Lynis
+      ansible.builtin.apt:
+        name: lynis
+        state: present
+
+    - name: Lancer l'audit
+      ansible.builtin.command: lynis audit system --cronjob
+      changed_when: false
+
+    - name: Lire le rapport
+      ansible.builtin.slurp:
+        src: /var/log/lynis-report.dat
+      register: report
+
+    - name: Extraire le score et les findings
+      ansible.builtin.set_fact:
+        lynis_score: "{{ (report.content | b64decode) | regex_search('hardening_index=(\\d+)', '\\1') | first }}"
+        lynis_warnings: "{{ (report.content | b64decode) | regex_findall('warning\\[\\]=([^|]+)') }}"
+        lynis_suggestions: "{{ (report.content | b64decode) | regex_findall('suggestion\\[\\]=([^|]+)') }}"
+
+    - name: Score de durcissement
+      ansible.builtin.debug:
+        msg:
+          - "Hardening index : {{ lynis_score }}"
+          - "Warnings ({{ lynis_warnings | length }}) : {{ lynis_warnings | unique | join(', ') }}"
+          - "Suggestions : {{ lynis_suggestions | length }}"
+
+    - name: Rapatrier le log complet
+      ansible.builtin.fetch:
+        src: /var/log/lynis.log
+        dest: "lynis-reports/{{ inventory_hostname }}-lynis.log"
+        flat: true

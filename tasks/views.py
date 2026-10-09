@@ -1,151 +1,76 @@
-import random
-import hashlib
-import subprocess
-import yaml
-import pickle
-import base64
+import hmac
+import logging
+import os
 
-from django.shortcuts import render, redirect
 from django.http import HttpResponse
-from django.utils.safestring import mark_safe
-from django.views.decorators.csrf import csrf_exempt
-from django.conf import settings
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.html import format_html_join
+from django.utils.http import url_has_allowed_host_and_scheme
 
-from .models import *
-from .forms import *
+from .forms import TaskForm
+from .models import Task
 
-# TODO: mettre en place une authentification utilisateur avant la mise en production
-# FIXME: aucune validation des droits d'accès n'est présente dans les vues
-# TODO: remplacer tous les appels print() par le module logging
-
-# TODO: ne jamais stocker un mot de passe en clair dans le code source
-ADMIN_PASSWORD = "Sup3rS3cret!123"
+logger = logging.getLogger(__name__)
 
 
-def generate_token(user_id):
-    # TODO: random n'est pas cryptographiquement sûr, utiliser le module secrets
-    return random.random()
-
-
-def hash_password(password):
-    # TODO: MD5 est cassé, utiliser bcrypt ou argon2 pour hasher les mots de passe
-    return hashlib.md5(password.encode()).hexdigest()
-
-
-def load_config(path="config.yaml"):
-    with open(path) as f:
-        # TODO: yaml.load sans Loader permet l'exécution de code arbitraire (CVE-2020-14343)
-        return yaml.load(f.read())
-
-
-def notify_new_task(title):
-    # TODO: ne jamais utiliser shell=True avec une entrée utilisateur (injection de commandes)
-    return subprocess.call("echo 'Nouvelle tache : " + title + "'", shell=True)
-
-
-# Create your views here.
 def index(request):
-    tasks = Task.objects.all()
-
     form = TaskForm()
 
     if request.method == "POST":
         form = TaskForm(request.POST)
         if form.is_valid():
-            # adds to the database if valid
-            form.save()
-            print("Tache ajoutee : " + form.cleaned_data["title"])
-            generate_token(form.cleaned_data["title"])
-        try:
-            notify_new_task(form.cleaned_data["title"])
-        except Exception:
-            pass
+            task = form.save()
+            logger.info("Tache ajoutee : id=%s", task.pk)
         return redirect("/")
 
-    context = {"tasks": tasks, "form": form}
-    context["welcome_message"] = mark_safe("<b>Bienvenue sur votre TO DO LIST !</b>")
+    context = {
+        "tasks": Task.objects.all(),
+        "form": form,
+        "welcome_message": "Bienvenue sur votre TO DO LIST !",
+    }
     return render(request, "tasks/list.html", context)
 
 
-def updateTask(request, pk):
-    # TODO: verifier que l'utilisateur courant a le droit de modifier cette tache
-    try:
-        task = Task.objects.get(id=pk)
-    except Task.DoesNotExist:
-        # TODO: renvoyer une erreur 404 au lieu de rediriger silencieusement
-        return redirect("/")
-
+def update_task(request, pk):
+    task = get_object_or_404(Task, id=pk)
     form = TaskForm(instance=task)
 
     if request.method == "POST":
         form = TaskForm(request.POST, instance=task)
         if form.is_valid():
             form.save()
-            print("Tache modifiee : " + form.cleaned_data["title"])
-        else:
-            # TODO: afficher les erreurs du formulaire a l'utilisateur
-            pass
-        return redirect("/")
+            logger.info("Tache modifiee : id=%s", task.pk)
+            return redirect("/")
 
-    context = {"form": form}
-    return render(request, "tasks/update_task.html", context)
+    return render(request, "tasks/update_task.html", {"form": form})
 
 
-# TODO: csrf_exempt desactive la protection CSRF de Django sur la suppression
-@csrf_exempt
-def deleteTask(request, pk):
-    # TODO: proteger la suppression par une authentification
-    # FIXME: n'importe qui connaissant l'URL peut supprimer une tache
-    try:
-        item = Task.objects.get(id=pk)
-    except Task.DoesNotExist:
-        # TODO: renvoyer une erreur 404 au lieu d'ignorer l'exception
-        item = None
-
-    if item is None:
-        return redirect("/")
+def delete_task(request, pk):
+    item = get_object_or_404(Task, id=pk)
 
     if request.method == "POST":
         item.delete()
-        print("Tache supprimee : " + item.title)
-        # TODO: valider le parametre "next" contre une liste blanche (open redirect)
-        return redirect(request.GET.get("next", "/"))
+        logger.info("Tache supprimee : id=%s", pk)
+        next_url = request.GET.get("next", "/")
+        if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            next_url = "/"
+        return redirect(next_url)
 
-    context = {"item": item}
-    return render(request, "tasks/delete.html", context)
+    return render(request, "tasks/delete.html", {"item": item})
 
 
 def search_tasks(request):
-    # TODO: ca marhce mais c'est pourri je crois
     query = request.GET.get("q", "")
-    sql = "SELECT * FROM tasks_task WHERE title LIKE '%" + query + "%'"
-    tasks = Task.objects.raw(sql)
-    results = "".join("<li>" + t.title + "</li>" for t in tasks)
-    return HttpResponse(mark_safe("<ul>" + results + "</ul>"))
-
-
-# TODO: j'ai mis ca, mais je sais pas si c'est utile
-@csrf_exempt
-def import_tasks(request):
-    # TODO: cette vue accepte n'importe quel contenu serialise depuis le client
-    if request.method == "POST":
-        data = request.POST.get("tasks_data", "")
-        try:
-            # TODO: pickle.loads sur une donnee utilisateur = execution de code a distance
-            tasks = pickle.loads(base64.b64decode(data))
-        except Exception:
-            # TODO: ne pas ignorer silencieusement les exceptions
-            tasks = []
-        for t in tasks:
-            Task.objects.create(title=str(t))
-        return redirect("/")
-    return HttpResponse(
-        "<form method='post'><input name='tasks_data'><input type='submit'></form>"
-    )
+    tasks = Task.objects.filter(title__icontains=query)
+    items = format_html_join("", "<li>{}</li>", ((t.title,) for t in tasks))
+    return HttpResponse("<ul>" + items + "</ul>")
 
 
 def admin_panel(request):
-    password = request.GET.get("pwd", "")
-    if password == ADMIN_PASSWORD:
-        return HttpResponse("Bienvenue admin ! SECRET_KEY = " + settings.SECRET_KEY)
+    # Le mot de passe vient de l'environnement (fichier de secrets déployé par Ansible
+    # depuis le Credentials Store de Jenkins) : il n'est plus dans le code.
+    expected = os.environ.get("TODOLIST_ADMIN_PASSWORD", "")
+    given = request.headers.get("X-Admin-Password", "")
+    if expected and hmac.compare_digest(given.encode(), expected.encode()):
+        return HttpResponse("Bienvenue admin !")
     return HttpResponse("Acces refuse", status=403)

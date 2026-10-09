@@ -1,24 +1,22 @@
 {% extends 'tasks/base.html' %}
 {% block content %}
 <h1 class="matrix-title"><b>TO DO LIST</b><span class="cursor">_</span></h1>
-<p class="welcome">{{ welcome_message }}</p>
+<p class="welcome"><b>{{ welcome_message }}</b></p>
 <div class="center-column">
 	<form method="POST" action="/">
 		{% csrf_token %}
 		{{form.title}}
 		<input class="btn btn-info" type="submit" name="Create Task">
 	</form>
-
-	<!-- TODO: {{task.title|safe}} desactive l'echappement XSS : a corriger -->
 	<div class="todo-list">
 	{% for task in tasks %}
 		<div class="item-row">
 			<a class="btn btn-sm btn-info" href = "{% url 'update_task' task.id %}">Update</a>
 			<a class="btn btn-sm btn-danger" href = "{% url 'delete' task.id %}">Delete</a>
 			{% if task.complete == True %}
-			<strike>{{task.title|safe}}</strike>
+			<strike>{{ task.title }}</strike>
 			{% else %}
-			<span>{{task.title|safe}}</span>
+			<span>{{ task.title }}</span>
 			{% endif %}
 
 		</div>

@@ -1,6 +1,9 @@
 ---
 # Rôle hardening : J1 ex. 14 à 18, appliqué à TOUTES les VM (apps, jenkins, sonarqube)
 
+- name: Corriger les sources APT
+  ansible.builtin.import_tasks: apt-mirror.yml
+
 # ---- Ex. 16 : mises à jour -------------------------------------------------
 - name: Mettre à jour le cache APT et les paquets
   ansible.builtin.apt:

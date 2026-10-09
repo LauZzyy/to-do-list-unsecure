@@ -1,0 +1,15 @@
+---
+# La box Vagrant pointe vers httpredir.debian.org (obsolète) et tente l'IPv6, qui ne passe pas dans le lab
+- name: Utiliser le miroir deb.debian.org
+  ansible.builtin.replace:
+    path: /etc/apt/sources.list
+    regexp: 'httpredir\.debian\.org'
+    replace: 'deb.debian.org'
+  tags: [hardening, updates]
+
+- name: Forcer APT en IPv4
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/99force-ipv4
+    content: 'Acquire::ForceIPv4 "true";'
+    mode: "0644"
+  tags: [hardening, updates]

@@ -12,6 +12,7 @@
       ansible.builtin.apt:
         name: lynis
         state: present
+        update_cache: true
 
     - name: Lancer l'audit
       ansible.builtin.command: lynis audit system --cronjob

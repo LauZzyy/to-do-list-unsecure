@@ -8,7 +8,7 @@ ufw_rules:
   - { port: "80", proto: tcp, from: any, comment: "todolist HTTP" }
 
 # ---- Application -----------------------------------------------------------
-app_repo: "https://github.com/CHANGEZ-MOI/to-do-list-unsecure.git"   # votre fork
+app_repo: "https://github.com/LauZzyy/to-do-list-unsecure.git"   # votre fork
 app_user: todolist
 app_dir: /opt/todolist
 venv_dir: /opt/todolist/venv

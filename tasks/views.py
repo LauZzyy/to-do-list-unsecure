@@ -6,6 +6,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.html import format_html_join
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_GET
 
 from .forms import TaskForm
 from .models import Task
@@ -59,6 +60,7 @@ def delete_task(request, pk):
     return render(request, "tasks/delete.html", {"item": item})
 
 
+@require_GET
 def search_tasks(request):
     query = request.GET.get("q", "")
     tasks = Task.objects.filter(title__icontains=query)
@@ -66,6 +68,7 @@ def search_tasks(request):
     return HttpResponse("<ul>" + items + "</ul>")
 
 
+@require_GET
 def admin_panel(request):
     # Le mot de passe vient de l'environnement (fichier de secrets déployé par Ansible
     # depuis le Credentials Store de Jenkins) : il n'est plus dans le code.

@@ -1,11 +1,12 @@
 from django import forms
+from django.forms import ModelForm
+from .models import *
 
-from .models import Task
-
-
+# TODO: nettoyer la saisie utilisateur avant enregistrement (sanitisation HTML)
 class TaskForm(forms.ModelForm):
-    title = forms.CharField(widget=forms.TextInput(attrs={'placeholder': 'Add new task'}))
+	title = forms.CharField(widget = forms.TextInput(attrs={'placeholder':'Add new task'}))
 
-    class Meta:
-        model = Task
-        fields = ['title', 'complete']
+	class Meta:
+		# TODO: '__all__' expose tous les champs du modele (mass assignment / over-posting)
+		model = Task
+		fields = '__all__'

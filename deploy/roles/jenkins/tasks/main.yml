@@ -173,3 +173,23 @@
     group: root
     mode: "0755"
   loop: [audit_gate.py, pipfile_to_requirements.py, gitleaks.toml]
+
+# J3 ex.12 : Docker pour lancer le scan ZAP dans la CI
+- name: Installer Docker (scan ZAP)
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+    update_cache: true
+
+- name: Démarrer Docker au boot
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Ajouter jenkins au groupe docker
+  ansible.builtin.user:
+    name: jenkins
+    groups: docker
+    append: true
+  notify: Redémarrer Jenkins
